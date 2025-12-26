@@ -1,0 +1,86 @@
+# TutoPlayer
+
+A simple, browser-based video player for watching video tutorials and courses.
+
+---
+
+## How to Use
+
+TutoPlayer is designed to be dead simple: just one HTML file sitting next to your videos.
+
+### Option 1: Drop a Folder
+
+1.  Place `TutoPlayer v4.0.html` **in the same directory as your video folders**.
+2.  Open the HTML file in your browser.
+3.  Drag and drop a folder containing your videos onto the page.
+4.  The playlist will be built and the first video will start playing.
+
+**Example structure:**
+```
+My Courses/
+├── TutoPlayer v4.0.html
+├── Algorithm and DS/
+│   ├── 1. Introduction.mp4
+│   ├── 2. Big O Notation.mp4
+│   └── ...
+└── Web Development/
+    ├── 01. HTML Basics.mp4
+    └── ...
+```
+
+### Option 2: Drop Video Files
+
+1.  Place `TutoPlayer v4.0.html` **inside the folder with your videos**.
+2.  Open the HTML file in your browser.
+3.  Select all your video files and drag them onto the page.
+
+**Example structure:**
+```
+Algorithm and DS/
+├── TutoPlayer v4.0.html
+├── 1. Introduction.mp4
+├── 2. Big O Notation.mp4
+└── ...
+```
+
+---
+
+## Features
+
+-   **Keyboard Shortcuts:**
+    -   `Space` or `K`: Play/Pause
+    -   `F`: Toggle Fullscreen
+    -   `T`: Toggle Theater Mode
+    -   `M`: Mute/Unmute
+    -   `J` or `←`: Rewind 5 seconds
+    -   `L` or `→`: Fast-forward 5 seconds
+
+-   **Dynamic Title:** The browser tab title updates to `TutoPlayer - [Folder Name]`.
+
+-   **Natural Sorting:** Files are sorted numerically (1, 2, 10, 11) rather than alphabetically (1, 10, 11, 2).
+
+-   **Fullscreen Auto-Hide:** In fullscreen mode, controls and the cursor automatically hide after 2 seconds of inactivity.
+
+---
+
+## Local Storage
+
+TutoPlayer saves your current playlist and progress to your browser's **local storage**. This means:
+
+-   **Your playlist is remembered:** When you reopen the page, your last playlist will be automatically loaded.
+-   **Your last video is saved:** The player remembers which video you were on.
+-   **7-day expiry:** The saved data automatically expires after 7 days of inactivity.
+
+To clear your saved playlist, you can clear your browser's local storage for the page or wait for the 7-day expiry.
+
+---
+
+## Supported Formats
+
+TutoPlayer supports standard web video formats:
+-   `.mp4`
+-   `.webm`
+-   `.mov`
+-   `.mkv`
+-   `.ogg`
+-   `.avi` (browser support may vary)
