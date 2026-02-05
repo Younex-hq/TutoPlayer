@@ -870,6 +870,7 @@
     const LOCAL_STORAGE_KEY = 'tutoPlayerPlaylist';
     const EXPIRATION_TIME_MS = 7 * 24 * 60 * 60 * 1000;
     let subtitleFiles = new Map(); // Map: filename (normalized) -> blob URL or File object
+    let savedSubtitlePaths = []; // List of subtitle paths (relative)
     let currentFlattenedPlaylist = [];
     let currentPlaylistStructure = null;
 
@@ -935,11 +936,35 @@
         }
       }
 
+      // If no match in memory, check saved paths (Persistence)
+      if (!bestMatch && savedSubtitlePaths && savedSubtitlePaths.length > 0) {
+        let maxPathSimilarity = 0;
+        for (const subPath of savedSubtitlePaths) {
+          const subName = subPath.split('/').pop(); // Extract filename from path
+          const subBase = getBaseName(subName);
+          const similarity = calculateSimilarity(videoBase, subBase);
+
+          if (similarity > maxPathSimilarity) {
+            maxPathSimilarity = similarity;
+            bestMatch = subPath; // Return the String path
+          }
+        }
+        if (maxPathSimilarity < 0.7) return null;
+      }
+
       // Threshold: 0.7 (70% match)
-      return maxSimilarity >= 0.7 ? bestMatch : null;
+      return maxSimilarity >= 0.7 || (typeof bestMatch === 'string') ? bestMatch : null;
     }
-    function savePlaylistToLocalStorage(folder, videos, lastPlayedIndex) {
-      const item = { data: { folder, videos, lastPlayedIndex }, expiry: new Date().getTime() + EXPIRATION_TIME_MS };
+    function savePlaylistToLocalStorage(folder, videos, lastPlayedIndex, subtitlePaths) {
+      const item = {
+        data: {
+          folder,
+          videos,
+          lastPlayedIndex,
+          subtitlePaths: subtitlePaths || savedSubtitlePaths
+        },
+        expiry: new Date().getTime() + EXPIRATION_TIME_MS
+      };
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(item));
     }
 
@@ -997,7 +1022,7 @@
         listItem.innerHTML = svgWave + `<span>${item.name}</span>`;
         listItem.onclick = () => {
           loadVideo(index, true);
-          savePlaylistToLocalStorage(folder, currentPlaylistStructure, index);
+          savePlaylistToLocalStorage(folder, currentPlaylistStructure, index, savedSubtitlePaths);
         };
         return listItem;
       };
@@ -1065,6 +1090,14 @@
       const folderName = folderInput.value || ".";
       const selectedTitle = item.name;
 
+      // Update Folder Name Display (Use Section Title if available)
+      const folderNameDisplay = document.querySelector("h3.folder-name");
+      if (item.type === 'section') {
+        folderNameDisplay.textContent = item.sectionTitle;
+      } else {
+        folderNameDisplay.textContent = folderName;
+      }
+
       // Construct URL using path
       // Path is relative to the dropped folder.
       // item.path is "subfolder/video.mp4" or "video.mp4"
@@ -1075,10 +1108,19 @@
       video.src = `${encodedRootFolder}/${encodedPath}`;
 
       // --- Subtitle Loading ---
-      const subtitleFile = findBestSubtitleMatch(item.name); // Using filename for matching logic
-      if (subtitleFile) {
+      const subtitleMatch = findBestSubtitleMatch(item.name); // Using filename for matching logic
+
+      if (subtitleMatch) {
         if (track.src) URL.revokeObjectURL(track.src);
-        track.src = URL.createObjectURL(subtitleFile);
+
+        if (typeof subtitleMatch === 'string') {
+          // It's a path
+          const encodedSubPath = subtitleMatch.split('/').map(part => encodeURIComponent(part)).join('/');
+          track.src = `${encodedRootFolder}/${encodedSubPath}`;
+        } else {
+          // It's a File/Blob
+          track.src = URL.createObjectURL(subtitleMatch);
+        }
 
         // Wait for the track to load to access textTracks
         track.onload = () => {
@@ -1127,17 +1169,15 @@
 
       if (firstItemEntry && firstItemEntry.isDirectory) {
         try {
-          const { folderName, structure, subtitleFiles: droppedSubtitles, hasVideos } = await processDroppedFolder(firstItemEntry);
+          const { folderName, structure, subtitlePaths: droppedSubtitles, hasVideos } = await processDroppedFolder(firstItemEntry);
 
-          // Store subtitles
-          droppedSubtitles.forEach(file => {
-            subtitleFiles.set(file.name, file);
-          });
+          // Store subtitles (paths)
+          savedSubtitlePaths = droppedSubtitles;
 
           if (hasVideos) {
             // New signature for startPlaylist: folderName, structure
             folderInput.value = folderName;
-            startPlaylist(folderName, structure);
+            startPlaylist(folderName, structure, savedSubtitlePaths);
           } else {
             alert('No valid video files found in the dropped folder.');
           }
@@ -1219,7 +1259,7 @@
         sections: [] // Subfolders
       };
 
-      const allSubtitleFiles = [];
+      const collectedSubtitlePaths = [];
 
       for (const entry of topLevelEntries) {
         if (entry.isFile) {
@@ -1230,7 +1270,8 @@
           if (VALID_VIDEO_EXTENSIONS.includes(extension)) {
             structure.root.push({ name: file.name, path: file.name, file: file }); // path is just name for root
           } else if (VALID_SUBTITLE_EXTENSIONS.includes(extension)) {
-            allSubtitleFiles.push(file);
+            subtitleFiles.set(file.name, file);
+            collectedSubtitlePaths.push(file.name);
           }
 
         } else if (entry.isDirectory) {
@@ -1257,7 +1298,8 @@
               if (VALID_VIDEO_EXTENSIONS.includes(extension)) {
                 sectionVideos.push({ name: item.name || item.file.name, path: item.path, file: item.file });
               } else if (VALID_SUBTITLE_EXTENSIONS.includes(extension)) {
-                allSubtitleFiles.push(item.file);
+                subtitleFiles.set(item.file.name, item.file);
+                collectedSubtitlePaths.push(item.path);
               }
             });
           }
@@ -1281,12 +1323,12 @@
       // Gather all video files for simple "valid video" check
       const allVideoFiles = [...structure.root, ...structure.sections.flatMap(s => s.videos)];
 
-      return { folderName: dirEntry.name, structure, subtitleFiles: allSubtitleFiles, hasVideos: allVideoFiles.length > 0 };
+      return { folderName: dirEntry.name, structure, subtitlePaths: collectedSubtitlePaths, hasVideos: allVideoFiles.length > 0 };
     }
 
-    function startPlaylist(folder, structure) {
+    function startPlaylist(folder, structure, subPaths = []) {
       buildAndDisplayPlaylist(folder, structure);
-      savePlaylistToLocalStorage(folder, structure, 0); // 0 is initial index
+      savePlaylistToLocalStorage(folder, structure, 0, subPaths); // 0 is initial index
       loadVideo(0, true);
     }
 
@@ -1294,6 +1336,11 @@
       const savedPlaylist = loadPlaylistFromLocalStorage();
       if (savedPlaylist) {
         folderInput.value = savedPlaylist.folder;
+        // Restore subtitle paths
+        if (savedPlaylist.subtitlePaths) {
+          savedSubtitlePaths = savedPlaylist.subtitlePaths;
+        }
+
         // Check if old format (videos is string)
         if (typeof savedPlaylist.videos === 'string') {
           // Backward compatibility: Convert to simple structure (all root)
