@@ -12,21 +12,21 @@ TutoPlayer is designed to be dead simple: just one HTML file sitting next to you
 
 1.  Place `TutoPlayer_v4.1.0.html` **in the same directory as your video folders**.
 2.  Open the HTML file in your browser.
-3.  Drag and drop a folder containing your videos onto the page.
-4.  The playlist will be built and the first video will start playing.
+3.  Drag and drop a **root folder** containing your videos (and subfolders) onto the page.
+4.  The playlist will be built with collapsible sections for each subfolder.
 
 **Example structure:**
 ```
-My Courses/
-├── TutoPlayer_v4.1.0.html
-├── Algorithm and DS/
-│   ├── 1. Introduction.mp4
-│   ├── 1. Introduction_en.vtt
-│   ├── 2. Big O Notation.mp4
+My Full Course/
+├── Introduction/
+│   ├── 1. Welcome.mp4
+│   └── 1. Welcome.vtt
+├── Chapter 1 - Basics/
+│   ├── 1. Setup.mp4
+│   └── 2. First Code.mp4
+├── Chapter 2 - Advanced/
 │   └── ...
-└── Web Development/
-    ├── 01. HTML Basics.mp4
-    └── ...
+└── Summary.mp4
 ```
 
 ### Option 2: Drop Video Files
@@ -44,6 +44,12 @@ Algorithm and DS/
 ├── 2. Big O Notation.mp4
 └── ...
 ```
+
+### ⚠️ Important Note on Refreshing
+
+If you refresh the page or close/reopen it:
+-   **Videos:** Will be remembered and work automatically without re-uploading (if the file path hasn't changed).
+-   **Subtitles:** Due to browser security restrictions, **subtitles may be lost** on reload. To restore them, simply **drag and drop the course folder again**.
 
 ---
 
