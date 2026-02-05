@@ -717,6 +717,65 @@
         width: 100%;
       }
     }
+
+    /* == Accordion / Multi-Folder Playlist Styles == */
+    details.playlist-section {
+      width: 100%;
+      margin-bottom: 2px;
+      background-color: transparent;
+    }
+
+    summary.playlist-section-header {
+      padding: 12px 15px;
+      cursor: pointer;
+      background-color: rgba(255, 255, 255, 0.03);
+      color: var(--text);
+      font-weight: 500;
+      font-size: 1rem;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      transition: background-color 0.2s;
+    }
+
+    summary.playlist-section-header:hover {
+      background-color: rgba(255, 255, 255, 0.08);
+    }
+
+    summary.playlist-section-header::-webkit-details-marker {
+      display: none;
+    }
+
+    summary.playlist-section-header::after {
+      content: '▽';
+      font-weight: 200;
+      color: var(--text);
+    }
+
+    details[open] summary.playlist-section-header::after {
+      content: '△';
+      font-weight: bold;
+      color: var(--primary);
+    }
+
+    details[open] summary.playlist-section-header {
+      background-color: rgba(255, 255, 255, 0.05);
+      color: var(--primary);
+    }
+
+    /* Nested items inside details */
+    details.playlist-section ul {
+      list-style: none;
+      background-color: rgba(0, 0, 0, 0.1);
+    }
+
+    details.playlist-section li.tutos {
+      padding-left: 25px;
+      /* Indent nested items */
+      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    }
   </style>
 </head>
 
@@ -811,6 +870,8 @@
     const LOCAL_STORAGE_KEY = 'tutoPlayerPlaylist';
     const EXPIRATION_TIME_MS = 7 * 24 * 60 * 60 * 1000;
     let subtitleFiles = new Map(); // Map: filename (normalized) -> blob URL or File object
+    let currentFlattenedPlaylist = [];
+    let currentPlaylistStructure = null;
 
     function getBaseName(filename) {
       return filename.split('.').slice(0, -1).join('.').trim().toLowerCase();
@@ -893,44 +954,128 @@
       return item.data;
     }
 
-    function buildAndDisplayPlaylist(folder, videoString) {
+    function flattenPlaylist(structure) {
+      const flat = [];
+      // 1. Root files
+      if (structure.root && structure.root.length > 0) {
+        structure.root.forEach((item, originalIndex) => {
+          flat.push({ ...item, type: 'root', originalIndex });
+        });
+      }
+      // 2. Sections
+      if (structure.sections && structure.sections.length > 0) {
+        structure.sections.forEach(section => {
+          section.videos.forEach((item, originalIndex) => {
+            flat.push({ ...item, type: 'section', sectionTitle: section.title, originalIndex });
+          });
+        });
+      }
+      return flat;
+    }
+
+    function buildAndDisplayPlaylist(folder, structure) {
       document.body.classList.add("playlist-loaded");
       document.querySelector("h3.folder-name").textContent = `${folder}`;
       document.title = `TutoPlayer - ${folder}`;
-      const episodes = videoString.split("|").map(ep => ep.trim()).filter(ep => ep.length > 0);
-      const tutorialsList = document.querySelector(".tutorials");
-      tutorialsList.innerHTML = "";
-      episodes.forEach((ep, index) => {
+
+      const tutorialsListContainer = document.querySelector(".tutorials"); // It's an OL, but we'll append Details/UL to it or replace it?
+      // Replacing OL with a DIV container logic would be cleaner but let's stick to appending to the existing container
+      // but we need to clear it first.
+      tutorialsListContainer.innerHTML = "";
+
+      // We need to rebuild the global flattened playlist
+      currentPlaylistStructure = structure;
+      currentFlattenedPlaylist = flattenPlaylist(structure);
+
+      let globalIndex = 0;
+
+      // Helper to create a list item
+      const createListItem = (item, index) => {
         const listItem = document.createElement("li");
         listItem.className = "tutos";
-        listItem.innerHTML = svgWave + `<span>${ep}</span>`;
-        tutorialsList.appendChild(listItem);
+        listItem.dataset.index = index; // Store global index
+        listItem.innerHTML = svgWave + `<span>${item.name}</span>`;
         listItem.onclick = () => {
           loadVideo(index, true);
-          savePlaylistToLocalStorage(folder, videoString, index);
+          savePlaylistToLocalStorage(folder, currentPlaylistStructure, index);
         };
-      });
+        return listItem;
+      };
+
+      // 1. Render Root Files (if any)
+      if (structure.root && structure.root.length > 0) {
+        // Maybe wrap root files in a "General" section if there are also sub-sections?
+        // For now, list them at the top.
+        structure.root.forEach(item => {
+          tutorialsListContainer.appendChild(createListItem(item, globalIndex++));
+        });
+      }
+
+      // 2. Render Sections
+      if (structure.sections && structure.sections.length > 0) {
+        structure.sections.forEach(section => {
+          const details = document.createElement('details');
+          details.className = 'playlist-section';
+
+          const summary = document.createElement('summary');
+          summary.className = 'playlist-section-header';
+          summary.textContent = section.title;
+          details.appendChild(summary);
+
+          const ul = document.createElement('ul');
+          section.videos.forEach(video => {
+            ul.appendChild(createListItem(video, globalIndex++));
+          });
+          details.appendChild(ul);
+          tutorialsListContainer.appendChild(details);
+        });
+      }
     }
 
     function loadVideo(index, autoPlay = false) {
-      const allListItems = document.querySelectorAll("li.tutos");
-      if (index < 0 || index >= allListItems.length) return;
-      const listItem = allListItems[index];
+      if (index < 0 || index >= currentFlattenedPlaylist.length) return;
 
-      allListItems.forEach(item => item.classList.remove("active"));
-      document.querySelectorAll("svg.wave").forEach(wave => wave.classList.remove("active"));
+      const item = currentFlattenedPlaylist[index];
+
+      // Update UI active state
+      // Find the list item with data-index = index
+      const allListItems = document.querySelectorAll("li.tutos");
+      allListItems.forEach(li => {
+        li.classList.remove("active");
+        const wave = li.querySelector(".wave");
+        if (wave) wave.classList.remove("active");
+      });
+
+      const activeLi = document.querySelector(`li.tutos[data-index="${index}"]`);
+      if (activeLi) {
+        activeLi.classList.add("done", "active");
+        const wave = activeLi.querySelector(".wave");
+        if (wave) wave.classList.add("active");
+
+        // Auto-expand parent details if needed
+        const parentDetails = activeLi.closest('details');
+        if (parentDetails && !parentDetails.open) {
+          parentDetails.open = true;
+        }
+
+        // Scroll into view
+        activeLi.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
 
       const folderName = folderInput.value || ".";
-      const selectedTitle = listItem.querySelector("span").textContent;
+      const selectedTitle = item.name;
 
-      // URL-encode path components to handle special characters like '#'
-      const encodedFolderPath = folderName.split('/').map(part => encodeURIComponent(part)).join('/');
-      const encodedFileName = encodeURIComponent(selectedTitle);
+      // Construct URL using path
+      // Path is relative to the dropped folder.
+      // item.path is "subfolder/video.mp4" or "video.mp4"
+      // We need to split and encode each component
+      const encodedPath = item.path.split('/').map(part => encodeURIComponent(part)).join('/');
+      const encodedRootFolder = folderName.split('/').map(part => encodeURIComponent(part)).join('/');
 
-      video.src = `${encodedFolderPath}/${encodedFolderPath ? '/' : ''}${encodedFileName}`;
+      video.src = `${encodedRootFolder}/${encodedPath}`;
 
       // --- Subtitle Loading ---
-      const subtitleFile = findBestSubtitleMatch(selectedTitle);
+      const subtitleFile = findBestSubtitleMatch(item.name); // Using filename for matching logic
       if (subtitleFile) {
         if (track.src) URL.revokeObjectURL(track.src);
         track.src = URL.createObjectURL(subtitleFile);
@@ -960,9 +1105,7 @@
       }
 
       if (autoPlay) video.play();
-      listItem.classList.add("done", "active");
-      listItem.querySelector(".wave").classList.add("active");
-      document.querySelector("h1.title").textContent = selectedTitle.split('.').slice(0, -1).join('.');
+      document.querySelector("h1.title").textContent = item.name.split('.').slice(0, -1).join('.');
     }
 
     // === Drag and Drop Functionality ===
@@ -984,18 +1127,17 @@
 
       if (firstItemEntry && firstItemEntry.isDirectory) {
         try {
-          const { folderName, videoFiles, subtitleFiles: droppedSubtitles } = await processDroppedFolder(firstItemEntry);
+          const { folderName, structure, subtitleFiles: droppedSubtitles, hasVideos } = await processDroppedFolder(firstItemEntry);
 
           // Store subtitles
           droppedSubtitles.forEach(file => {
             subtitleFiles.set(file.name, file);
           });
 
-          if (videoFiles.length > 0) {
-            const videoNamesString = videoFiles.map(f => f.name).join(' | ');
+          if (hasVideos) {
+            // New signature for startPlaylist: folderName, structure
             folderInput.value = folderName;
-            videosInput.value = videoNamesString;
-            startPlaylist(folderName, videoNamesString);
+            startPlaylist(folderName, structure);
           } else {
             alert('No valid video files found in the dropped folder.');
           }
@@ -1021,39 +1163,130 @@
 
         if (videoFiles.length > 0) {
           videoFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-          const videoNamesString = videoFiles.map(f => f.name).join(' | ');
+          const structure = {
+            root: videoFiles.map(f => ({ name: f.name, path: f.name, file: f })),
+            sections: []
+          };
           const folderName = folderInput.value || '.';
-          videosInput.value = videoNamesString;
-          startPlaylist(folderName, videoNamesString);
+          startPlaylist(folderName, structure);
         } else {
           alert('No valid video files were dropped.');
         }
       }
     });
 
+    /**
+     * Reads all entries from a DirectoryReader (handles batching).
+     */
+    async function readAllDirectoryEntries(directoryReader) {
+      const entries = [];
+      let readEntries = await new Promise((resolve, reject) => directoryReader.readEntries(resolve, reject));
+      while (readEntries.length > 0) {
+        entries.push(...readEntries);
+        readEntries = await new Promise((resolve, reject) => directoryReader.readEntries(resolve, reject));
+      }
+      return entries;
+    }
+
+    /**
+     * Recursively scans a directory/file entry.
+     * Returns a flat list of items relative to the start entry.
+     */
+    async function scanEntry(entry, basePath = '') {
+      if (entry.isFile) {
+        const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+        return [{ entry, file, path: basePath + entry.name }];
+      } else if (entry.isDirectory) {
+        const dirReader = entry.createReader();
+        const entries = await readAllDirectoryEntries(dirReader);
+        const results = [];
+        for (const child of entries) {
+          // Recursive call: append current folder name to path
+          const children = await scanEntry(child, basePath + entry.name + '/');
+          results.push(...children);
+        }
+        return results;
+      }
+      return [];
+    }
+
     async function processDroppedFolder(dirEntry) {
       const dirReader = dirEntry.createReader();
-      const entries = await new Promise((resolve, reject) => dirReader.readEntries(resolve, reject));
-      const videoFiles = [];
-      const subFiles = [];
-      for (const entry of entries) {
+      const topLevelEntries = await readAllDirectoryEntries(dirReader);
+
+      const structure = {
+        root: [], // Files directly in the root folder
+        sections: [] // Subfolders
+      };
+
+      const allSubtitleFiles = [];
+
+      for (const entry of topLevelEntries) {
         if (entry.isFile) {
+          // Top-level file
           const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
           const extension = file.name.split('.').pop().toLowerCase();
+
           if (VALID_VIDEO_EXTENSIONS.includes(extension)) {
-            videoFiles.push(file);
+            structure.root.push({ name: file.name, path: file.name, file: file }); // path is just name for root
           } else if (VALID_SUBTITLE_EXTENSIONS.includes(extension)) {
-            subFiles.push(file);
+            allSubtitleFiles.push(file);
+          }
+
+        } else if (entry.isDirectory) {
+          // It's a section (subfolder)
+          // We scan this subfolder deeply.
+          // Note: scanEntry returns a flat list of all descendents.
+          // For a section "Chapter 1", we want all matching videos inside it.
+          // The 'path' returned by scanEntry will be relative to "Chapter 1/".
+          const sectionVideos = [];
+          const sectionItems = await scanEntry(entry, ''); // Start with empty base path relative to this folder? 
+          // Actually, we want the path relative to the ROOT dropped folder.
+          // So scanEntry called here should pass 'DirectoryName/' as base?
+          // No, let's just use scanEntry on the dirEntry itself, that handles recursion.
+          // But I want to group them under this Top-Level Directory Name.
+
+          // Let's manually recurse the children of this top-level directory:
+          const subDirReader = entry.createReader();
+          const subEntries = await readAllDirectoryEntries(subDirReader);
+
+          for (const subEntry of subEntries) {
+            const descendants = await scanEntry(subEntry, entry.name + '/');
+            descendants.forEach(item => {
+              const extension = item.file.name.split('.').pop().toLowerCase();
+              if (VALID_VIDEO_EXTENSIONS.includes(extension)) {
+                sectionVideos.push({ name: item.name || item.file.name, path: item.path, file: item.file });
+              } else if (VALID_SUBTITLE_EXTENSIONS.includes(extension)) {
+                allSubtitleFiles.push(item.file);
+              }
+            });
+          }
+
+          if (sectionVideos.length > 0) {
+            // Sort videos in this section
+            sectionVideos.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+            structure.sections.push({
+              title: entry.name,
+              videos: sectionVideos
+            });
           }
         }
       }
-      videoFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-      return { folderName: dirEntry.name, videoFiles, subtitleFiles: subFiles };
+
+      // Sort root videos
+      structure.root.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+      // Sort sections by title
+      structure.sections.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }));
+
+      // Gather all video files for simple "valid video" check
+      const allVideoFiles = [...structure.root, ...structure.sections.flatMap(s => s.videos)];
+
+      return { folderName: dirEntry.name, structure, subtitleFiles: allSubtitleFiles, hasVideos: allVideoFiles.length > 0 };
     }
 
-    function startPlaylist(folder, videos) {
-      buildAndDisplayPlaylist(folder, videos);
-      savePlaylistToLocalStorage(folder, videos, 0);
+    function startPlaylist(folder, structure) {
+      buildAndDisplayPlaylist(folder, structure);
+      savePlaylistToLocalStorage(folder, structure, 0); // 0 is initial index
       loadVideo(0, true);
     }
 
@@ -1061,8 +1294,20 @@
       const savedPlaylist = loadPlaylistFromLocalStorage();
       if (savedPlaylist) {
         folderInput.value = savedPlaylist.folder;
-        videosInput.value = savedPlaylist.videos;
-        buildAndDisplayPlaylist(savedPlaylist.folder, savedPlaylist.videos);
+        // Check if old format (videos is string)
+        if (typeof savedPlaylist.videos === 'string') {
+          // Backward compatibility: Convert to simple structure (all root)
+          const names = savedPlaylist.videos.split('|').map(s => s.trim()).filter(s => s.length);
+          const structure = {
+            root: names.map(name => ({ name, path: name, file: null })),
+            sections: []
+          };
+          // Warning: file objects are null, so drag-drop refresh might be needed for actually playing if not local-hosted
+          buildAndDisplayPlaylist(savedPlaylist.folder, structure);
+        } else {
+          buildAndDisplayPlaylist(savedPlaylist.folder, savedPlaylist.videos);
+        }
+
         loadVideo(savedPlaylist.lastPlayedIndex || 0, false);
       }
 
