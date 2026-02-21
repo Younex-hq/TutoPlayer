@@ -254,7 +254,9 @@ function loadVideo(index, autoPlay = false, resume = false) {
         folderNameDisplay.textContent = folderName;
     }
 
-    if (item.file) { // Play directly from browser memory if recently uploaded/dropped
+    const encodedRootFolder = folderName.split('/').map(part => encodeURIComponent(part)).join('/');
+
+    if (item.file && item.file instanceof Blob) { // Play directly from browser memory if recently uploaded/dropped
         if (video.src.startsWith('blob:')) URL.revokeObjectURL(video.src);
         video.src = URL.createObjectURL(item.file);
     } else { // Fallback to relative local path when reloaded from localstorage without native File objects
@@ -264,7 +266,6 @@ function loadVideo(index, autoPlay = false, resume = false) {
             // For standalone files, the root folder is simulated so we just use the file path
             video.src = encodedPath;
         } else {
-            const encodedRootFolder = folderName.split('/').map(part => encodeURIComponent(part)).join('/');
             video.src = `${encodedRootFolder}/${encodedPath}`;
         }
     }
