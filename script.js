@@ -1,7 +1,6 @@
 // === DOM Element Selections ===
-const folderInput = document.getElementById("input-folder");
-const videosInput = document.getElementById("input");
-const loadPlaylistBtn = document.getElementById("inputButton");
+const folderUpload = document.getElementById("folder-upload");
+const fileUpload = document.getElementById("file-upload");
 const video = document.querySelector("video");
 const videoContainer = document.querySelector(".video-container");
 const track = video.querySelector("track");
@@ -165,7 +164,10 @@ function buildAndDisplayPlaylist(folder, structure) {
         listItem.dataset.index = index; // Store global index
         listItem.innerHTML = svgWave + `<span>${item.name}</span>`;
         listItem.onclick = () => {
-            loadVideo(index, true);
+            if (currentCourseIndex !== -1 && courses[currentCourseIndex]) {
+                courses[currentCourseIndex].currentTime = 0;
+            }
+            loadVideo(index, true, false);
         };
         return listItem;
     };
@@ -200,7 +202,7 @@ function buildAndDisplayPlaylist(folder, structure) {
     }
 }
 
-function loadVideo(index, autoPlay = false) {
+function loadVideo(index, autoPlay = false, resume = false) {
     if (index < 0 || index >= currentFlattenedPlaylist.length) return;
 
     const item = currentFlattenedPlaylist[index];
@@ -240,7 +242,7 @@ function loadVideo(index, autoPlay = false) {
     }
     savePlaylistToLocalStorage(); // Save all courses state
 
-    const folderName = folderInput.value || ".";
+    const folderName = (currentCourseIndex !== -1 && courses[currentCourseIndex]) ? courses[currentCourseIndex].folderName : ".";
     const selectedTitle = item.name;
 
     // Update Folder Name Display (Use Section Title if available)
@@ -299,7 +301,16 @@ function loadVideo(index, autoPlay = false) {
         if (video.textTracks[0]) video.textTracks[0].mode = 'hidden';
     }
 
-    if (autoPlay) video.play();
+    if (resume && currentCourseIndex !== -1 && courses[currentCourseIndex].currentTime) {
+        const onLoaded = () => {
+            video.currentTime = courses[currentCourseIndex].currentTime;
+            video.removeEventListener('loadedmetadata', onLoaded);
+            if (autoPlay) video.play();
+        };
+        video.addEventListener('loadedmetadata', onLoaded);
+    } else {
+        if (autoPlay) video.play();
+    }
     document.querySelector("h1.title").textContent = item.name.split('.').slice(0, -1).join('.');
 }
 
@@ -338,32 +349,7 @@ dropZone.addEventListener('drop', async (e) => {
         }
     } else {
         const droppedFiles = Array.from(e.dataTransfer.files);
-
-        // Extract subtitles first
-        droppedFiles.forEach(file => {
-            const extension = file.name.split('.').pop().toLowerCase();
-            if (VALID_SUBTITLE_EXTENSIONS.includes(extension)) {
-                subtitleFiles.set(file.name, file);
-            }
-        });
-
-        const videoFiles = droppedFiles.filter(file => {
-            const extension = file.name.split('.').pop().toLowerCase();
-            return VALID_VIDEO_EXTENSIONS.includes(extension);
-        });
-
-        if (videoFiles.length > 0) {
-            videoFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-            const structure = {
-                root: videoFiles.map(f => ({ name: f.name, path: f.name, file: f })),
-                sections: []
-            };
-            const folderName = folderInput.value || '.';
-            const droppedSubtitles = Array.from(subtitleFiles.keys());
-            addCourse(folderName, structure, droppedSubtitles);
-        } else {
-            alert('No valid video files were dropped.');
-        }
+        handleFilesList(droppedFiles);
     }
 });
 
@@ -506,12 +492,11 @@ function switchCourse(index) {
     currentCourseIndex = index;
     const course = courses[index];
 
-    folderInput.value = course.folderName;
     savedSubtitlePaths = course.subtitlePaths || [];
 
     renderTabs();
     buildAndDisplayPlaylist(course.folderName, course.structure);
-    loadVideo(course.lastPlayedIndex || 0, false);
+    loadVideo(course.lastPlayedIndex || 0, false, true);
 }
 
 function renderTabs() {
@@ -553,7 +538,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 switchCourse(currentCourseIndex >= 0 ? currentCourseIndex : 0);
             }
         } else {
-            folderInput.value = savedPlaylist.folder;
             savedSubtitlePaths = savedPlaylist.subtitlePaths || [];
 
             let structure;
@@ -587,18 +571,90 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-loadPlaylistBtn.onclick = () => {
-    if (!videosInput.value) {
-        alert("Please enter video names in the input field.");
-        return;
+folderUpload.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    const structure = { root: [], sections: [] };
+    const droppedSubtitles = [];
+
+    const folderName = files[0].webkitRelativePath.split('/')[0] || 'Uploaded Folder';
+
+    files.forEach(file => {
+        const extension = file.name.split('.').pop().toLowerCase();
+        const parts = file.webkitRelativePath.split('/');
+
+        if (VALID_SUBTITLE_EXTENSIONS.includes(extension)) {
+            subtitleFiles.set(file.name, file);
+            droppedSubtitles.push(file.webkitRelativePath.substring(folderName.length + 1));
+        } else if (VALID_VIDEO_EXTENSIONS.includes(extension)) {
+            const relPath = file.webkitRelativePath.substring(folderName.length + 1);
+            if (parts.length === 2) {
+                structure.root.push({ name: file.name, path: relPath, file: file });
+            } else if (parts.length > 2) {
+                const sectionTitle = parts[1];
+                let section = structure.sections.find(s => s.title === sectionTitle);
+                if (!section) {
+                    section = { title: sectionTitle, videos: [] };
+                    structure.sections.push(section);
+                }
+                section.videos.push({ name: file.name, path: relPath, file: file });
+            }
+        }
+    });
+
+    structure.root.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    structure.sections.forEach(s => s.videos.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+    structure.sections.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }));
+
+    addCourse(folderName, structure, droppedSubtitles);
+});
+
+fileUpload.addEventListener('change', (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    handleFilesList(files);
+});
+
+function handleFilesList(droppedFiles) {
+    const droppedSubtitles = [];
+    droppedFiles.forEach(file => {
+        const extension = file.name.split('.').pop().toLowerCase();
+        if (VALID_SUBTITLE_EXTENSIONS.includes(extension)) {
+            subtitleFiles.set(file.name, file);
+            droppedSubtitles.push(file.name);
+        }
+    });
+
+    const videoFiles = droppedFiles.filter(file => {
+        const extension = file.name.split('.').pop().toLowerCase();
+        return VALID_VIDEO_EXTENSIONS.includes(extension);
+    });
+
+    if (videoFiles.length > 0) {
+        videoFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+        if (currentCourseIndex !== -1) {
+            const course = courses[currentCourseIndex];
+            const newVideos = videoFiles.map(f => ({ name: f.name, path: f.name, file: f }));
+            course.structure.root.push(...newVideos);
+            course.structure.root.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+            if (droppedSubtitles.length > 0) {
+                course.subtitlePaths = (course.subtitlePaths || []).concat(droppedSubtitles);
+            }
+            buildAndDisplayPlaylist(course.folderName, course.structure);
+            savePlaylistToLocalStorage();
+        } else {
+            const structure = {
+                root: videoFiles.map(f => ({ name: f.name, path: f.name, file: f })),
+                sections: []
+            };
+            addCourse('Uploaded Files', structure, droppedSubtitles);
+        }
+    } else {
+        alert('No valid video files found.');
     }
-    const names = videosInput.value.split('|').map(s => s.trim()).filter(s => s.length);
-    const structure = {
-        root: names.map(name => ({ name, path: name, file: null })),
-        sections: []
-    };
-    addCourse(folderInput.value || '.', structure);
-};
+}
 
 // === Keyboard Shortcuts & Player Controls ===
 const playerControls = {
@@ -659,6 +715,7 @@ if (isFirefox) {
 document.addEventListener("keydown", (e) => {
     const tagName = document.activeElement.tagName.toLowerCase();
     if (tagName === "input") return;
+    if (e.key === " ") e.preventDefault();
     showControls();
     switch (e.key.toLowerCase()) {
         case " ":
@@ -742,6 +799,10 @@ video.addEventListener("loadeddata", () => { playerControls.totalTimeElem.textCo
 video.addEventListener("timeupdate", () => {
     playerControls.currentTimeElem.textContent = formatDuration(video.currentTime);
     playerControls.timelineContainer.style.setProperty("--progress-position", video.currentTime / video.duration);
+
+    if (currentCourseIndex !== -1 && courses[currentCourseIndex]) {
+        courses[currentCourseIndex].currentTime = video.currentTime;
+    }
 });
 
 const leadingZeroFormatter = new Intl.NumberFormat(undefined, { minimumIntegerDigits: 2 });
@@ -754,6 +815,36 @@ function formatDuration(time) {
 function skip(duration) { video.currentTime += duration; }
 
 playerControls.muteBtn.addEventListener("click", toggleMute);
+
+let audioCtx;
+let sourceNode;
+let gainNode;
+
+playerControls.muteBtn.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+        sourceNode = audioCtx.createMediaElementSource(video);
+        gainNode = audioCtx.createGain();
+        sourceNode.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+    }
+
+    const isBoosted = gainNode.gain.value > 1;
+    if (isBoosted) {
+        gainNode.gain.value = 1;
+        playerControls.volumeSlider.parentElement.classList.remove('boosted');
+    } else {
+        gainNode.gain.value = 3;
+        playerControls.volumeSlider.parentElement.classList.add('boosted');
+    }
+});
+
+window.addEventListener('beforeunload', () => {
+    savePlaylistToLocalStorage();
+});
+
 playerControls.volumeSlider.addEventListener("input", (e) => {
     video.volume = e.target.value;
     video.muted = e.target.value === 0;

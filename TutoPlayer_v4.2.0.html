@@ -9,6 +9,7 @@
   <title>TutoPlayer</title>
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <nav class="nav-bar">
     <div class="logo">
@@ -33,16 +34,12 @@
       <span class="logo-name"> TutoPlayer </span>
     </div>
 
-    <div class="search-bar">
-      <input type="text" id="input-folder" placeholder="Folder Name (or drop)" />
-      <input type="text" id="input" placeholder='Videos name (or drop)' />
-      <button id="inputButton">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M15.3751 13.9494L12.454 11.0288C12.3221 10.897 12.1434 10.8237 11.9559 10.8237H11.4783C12.287 9.78967 12.7675 8.48901 12.7675 7.07411C12.7675 3.70823 10.0398 0.980957 6.6733 0.980957C3.30684 0.980957 0.579102 3.70823 0.579102 7.07411C0.579102 10.44 3.30684 13.1673 6.6733 13.1673C8.08844 13.1673 9.38932 12.6868 10.4236 11.8783V12.3558C10.4236 12.5433 10.4968 12.722 10.6287 12.8538L13.5498 15.7744C13.8252 16.0498 14.2705 16.0498 14.543 15.7744L15.3722 14.9454C15.6476 14.6701 15.6476 14.2248 15.3751 13.9494ZM6.6733 10.8237C4.60186 10.8237 2.92302 9.14813 2.92302 7.07411C2.92302 5.00303 4.59893 3.32448 6.6733 3.32448C8.74474 3.32448 10.4236 5.0001 10.4236 7.07411C10.4236 9.1452 8.74767 10.8237 6.6733 10.8237Z"
-            fill="white" />
-        </svg>
-      </button>
+    <div class="upload-buttons">
+      <label for="folder-upload" class="upload-btn">Upload Folder</label>
+      <input type="file" id="folder-upload" webkitdirectory directory multiple hidden />
+
+      <label for="file-upload" class="upload-btn">Upload Files</label>
+      <input type="file" id="file-upload" multiple hidden />
     </div>
     <div></div>
   </nav>
@@ -53,11 +50,10 @@
       <span>Drop Folder or Video Files Here</span>
     </div>
 
-    <!-- NEW: Welcome message shown on initial load -->
     <div class="welcome-message">
       <h2>Welcome to TutoPlayer!</h2>
       <p>Drag and drop a folder or video files to start a playlist.</p>
-      <p>You can also use the inputs in the nav-bar and click the search icon.</p>
+      <p>You can also use the upload buttons in the top right.</p>
     </div>
 
     <main>
