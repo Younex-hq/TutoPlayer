@@ -1,7 +1,7 @@
 // === DOM Element Selections ===
 const folderUpload = document.getElementById("folder-upload");
 const fileUpload = document.getElementById("file-upload");
-const clearAllBtn = document.getElementById("clear-all-btn");
+const logo = document.querySelector(".logo");
 const video = document.querySelector("video");
 const videoContainer = document.querySelector(".video-container");
 const track = video.querySelector("track");
@@ -254,14 +254,15 @@ function loadVideo(index, autoPlay = false, resume = false) {
         folderNameDisplay.textContent = folderName;
     }
 
-    // Construct URL using path
-    // Path is relative to the dropped folder.
-    // item.path is "subfolder/video.mp4" or "video.mp4"
-    // We need to split and encode each component
-    const encodedPath = item.path.split('/').map(part => encodeURIComponent(part)).join('/');
-    const encodedRootFolder = folderName.split('/').map(part => encodeURIComponent(part)).join('/');
-
-    video.src = `${encodedRootFolder}/${encodedPath}`;
+    // Load Source Logic
+    if (item.file) { // Play directly from browser memory if recently uploaded/dropped
+        if (video.src.startsWith('blob:')) URL.revokeObjectURL(video.src);
+        video.src = URL.createObjectURL(item.file);
+    } else { // Fallback to relative local path when reloaded from localstorage without native File objects
+        const encodedPath = item.path.split('/').map(part => encodeURIComponent(part)).join('/');
+        const encodedRootFolder = folderName.split('/').map(part => encodeURIComponent(part)).join('/');
+        video.src = `${encodedRootFolder}/${encodedPath}`;
+    }
 
     // --- Subtitle Loading ---
     const subtitleMatch = findBestSubtitleMatch(item.name); // Using filename for matching logic
@@ -302,9 +303,9 @@ function loadVideo(index, autoPlay = false, resume = false) {
         if (video.textTracks[0]) video.textTracks[0].mode = 'hidden';
     }
 
-    if (resume && currentCourseIndex !== -1 && courses[currentCourseIndex].currentTime) {
+    if (resume && currentCourseIndex !== -1 && courses[currentCourseIndex] && courses[currentCourseIndex].videoTimestamps && courses[currentCourseIndex].videoTimestamps[selectedTitle]) {
         const onLoaded = () => {
-            video.currentTime = courses[currentCourseIndex].currentTime;
+            video.currentTime = courses[currentCourseIndex].videoTimestamps[selectedTitle];
             video.removeEventListener('loadedmetadata', onLoaded);
             if (autoPlay) video.play();
         };
@@ -479,7 +480,8 @@ function addCourse(folderName, structure, subtitlePaths = []) {
             folderName,
             structure,
             subtitlePaths,
-            lastPlayedIndex: 0
+            lastPlayedIndex: 0,
+            videoTimestamps: {}
         });
         currentCourseIndex = courses.length - 1;
     }
@@ -490,6 +492,16 @@ function addCourse(folderName, structure, subtitlePaths = []) {
 
 function switchCourse(index) {
     if (index < 0 || index >= courses.length) return;
+
+    // Save current video's time before switching
+    if (currentCourseIndex !== -1 && courses[currentCourseIndex] && currentFlattenedPlaylist && currentFlattenedPlaylist.length > 0) {
+        const currentVideo = currentFlattenedPlaylist[courses[currentCourseIndex].lastPlayedIndex || 0];
+        if (currentVideo) {
+            courses[currentCourseIndex].videoTimestamps = courses[currentCourseIndex].videoTimestamps || {};
+            courses[currentCourseIndex].videoTimestamps[currentVideo.name] = video.currentTime;
+        }
+    }
+
     currentCourseIndex = index;
     const course = courses[index];
 
@@ -523,6 +535,28 @@ function renderTabs() {
 
         tab.onclick = () => {
             switchCourse(index);
+        };
+
+        tab.oncontextmenu = (e) => {
+            e.preventDefault();
+            if (confirm(`Are you sure you want to delete the tab "${course.folderName}"?`)) {
+                courses.splice(index, 1);
+
+                if (courses.length === 0) {
+                    if (clearAllBtn) clearAllBtn.click();
+                } else {
+                    if (currentCourseIndex === index) {
+                        switchCourse(0);
+                    } else if (currentCourseIndex > index) {
+                        currentCourseIndex--;
+                        renderTabs();
+                        savePlaylistToLocalStorage();
+                    } else {
+                        renderTabs();
+                        savePlaylistToLocalStorage();
+                    }
+                }
+            }
         };
 
         tabsContainer.appendChild(tab);
@@ -576,39 +610,50 @@ folderUpload.addEventListener('change', async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    const structure = { root: [], sections: [] };
-    const droppedSubtitles = [];
-
-    const folderName = files[0].webkitRelativePath.split('/')[0] || 'Uploaded Folder';
+    // Group files by top-level folder name
+    const groupedFolders = {};
 
     files.forEach(file => {
-        const extension = file.name.split('.').pop().toLowerCase();
         const parts = file.webkitRelativePath.split('/');
+        const folderName = parts[0] || 'Uploaded Folder';
+
+        if (!groupedFolders[folderName]) {
+            groupedFolders[folderName] = {
+                structure: { root: [], sections: [] },
+                droppedSubtitles: []
+            };
+        }
+
+        const extension = file.name.split('.').pop().toLowerCase();
+        const group = groupedFolders[folderName];
 
         if (VALID_SUBTITLE_EXTENSIONS.includes(extension)) {
             subtitleFiles.set(file.name, file);
-            droppedSubtitles.push(file.webkitRelativePath.substring(folderName.length + 1));
+            group.droppedSubtitles.push(file.webkitRelativePath.substring(folderName.length + 1));
         } else if (VALID_VIDEO_EXTENSIONS.includes(extension)) {
             const relPath = file.webkitRelativePath.substring(folderName.length + 1);
             if (parts.length === 2) {
-                structure.root.push({ name: file.name, path: relPath, file: file });
+                group.structure.root.push({ name: file.name, path: relPath, file: file });
             } else if (parts.length > 2) {
                 const sectionTitle = parts[1];
-                let section = structure.sections.find(s => s.title === sectionTitle);
+                let section = group.structure.sections.find(s => s.title === sectionTitle);
                 if (!section) {
                     section = { title: sectionTitle, videos: [] };
-                    structure.sections.push(section);
+                    group.structure.sections.push(section);
                 }
                 section.videos.push({ name: file.name, path: relPath, file: file });
             }
         }
     });
 
-    structure.root.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-    structure.sections.forEach(s => s.videos.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
-    structure.sections.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }));
+    Object.keys(groupedFolders).forEach(folderName => {
+        const group = groupedFolders[folderName];
+        group.structure.root.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        group.structure.sections.forEach(s => s.videos.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+        group.structure.sections.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }));
 
-    addCourse(folderName, structure, droppedSubtitles);
+        addCourse(folderName, group.structure, group.droppedSubtitles);
+    });
 });
 
 fileUpload.addEventListener('change', (e) => {
@@ -617,8 +662,10 @@ fileUpload.addEventListener('change', (e) => {
     handleFilesList(files);
 });
 
-if (clearAllBtn) {
-    clearAllBtn.addEventListener("click", () => {
+if (logo) {
+    logo.addEventListener("click", () => {
+        if (!document.body.classList.contains("playlist-loaded")) return;
+
         if (confirm("Are you sure you want to clear all playlists?")) {
             localStorage.removeItem(LOCAL_STORAGE_KEY);
             courses = [];
@@ -824,12 +871,17 @@ video.addEventListener("timeupdate", () => {
     playerControls.currentTimeElem.textContent = formatDuration(video.currentTime);
     playerControls.timelineContainer.style.setProperty("--progress-position", video.currentTime / video.duration);
 
-    if (currentCourseIndex !== -1 && courses[currentCourseIndex]) {
-        courses[currentCourseIndex].currentTime = video.currentTime;
-        const now = Date.now();
-        if (now - lastSaveTime > 2000) {
-            savePlaylistToLocalStorage();
-            lastSaveTime = now;
+    if (currentCourseIndex !== -1 && courses[currentCourseIndex] && currentFlattenedPlaylist && currentFlattenedPlaylist.length > 0) {
+        const activeVideo = currentFlattenedPlaylist[courses[currentCourseIndex].lastPlayedIndex || 0];
+        if (activeVideo) {
+            courses[currentCourseIndex].videoTimestamps = courses[currentCourseIndex].videoTimestamps || {};
+            courses[currentCourseIndex].videoTimestamps[activeVideo.name] = video.currentTime;
+
+            const now = Date.now();
+            if (now - lastSaveTime > 2000) {
+                savePlaylistToLocalStorage();
+                lastSaveTime = now;
+            }
         }
     }
 });
