@@ -17,6 +17,9 @@ let savedSubtitlePaths = []; // List of subtitle paths (relative)
 let currentFlattenedPlaylist = [];
 let currentPlaylistStructure = null;
 
+let courses = [];
+let currentCourseIndex = -1;
+
 function getBaseName(filename) {
     return filename.split('.').slice(0, -1).join('.').trim().toLowerCase();
 }
@@ -98,13 +101,11 @@ function findBestSubtitleMatch(videoName) {
     // Threshold: 0.7 (70% match)
     return maxSimilarity >= 0.7 || (typeof bestMatch === 'string') ? bestMatch : null;
 }
-function savePlaylistToLocalStorage(folder, videos, lastPlayedIndex, subtitlePaths) {
+function savePlaylistToLocalStorage() {
     const item = {
         data: {
-            folder,
-            videos,
-            lastPlayedIndex,
-            subtitlePaths: subtitlePaths || savedSubtitlePaths
+            courses: courses,
+            currentCourseIndex: currentCourseIndex
         },
         expiry: new Date().getTime() + EXPIRATION_TIME_MS
     };
@@ -165,7 +166,6 @@ function buildAndDisplayPlaylist(folder, structure) {
         listItem.innerHTML = svgWave + `<span>${item.name}</span>`;
         listItem.onclick = () => {
             loadVideo(index, true);
-            savePlaylistToLocalStorage(folder, currentPlaylistStructure, index, savedSubtitlePaths);
         };
         return listItem;
     };
@@ -228,7 +228,17 @@ function loadVideo(index, autoPlay = false) {
 
         // Scroll into view
         activeLi.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Auto-scroll to top in theater mode when a video is selected
+        if (document.querySelector(".content").classList.contains("content-theater")) {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        }
     }
+
+    if (currentCourseIndex !== -1 && courses[currentCourseIndex]) {
+        courses[currentCourseIndex].lastPlayedIndex = index;
+    }
+    savePlaylistToLocalStorage(); // Save all courses state
 
     const folderName = folderInput.value || ".";
     const selectedTitle = item.name;
@@ -318,9 +328,7 @@ dropZone.addEventListener('drop', async (e) => {
             savedSubtitlePaths = droppedSubtitles;
 
             if (hasVideos) {
-                // New signature for startPlaylist: folderName, structure
-                folderInput.value = folderName;
-                startPlaylist(folderName, structure, savedSubtitlePaths);
+                addCourse(folderName, structure, droppedSubtitles);
             } else {
                 alert('No valid video files found in the dropped folder.');
             }
@@ -351,7 +359,8 @@ dropZone.addEventListener('drop', async (e) => {
                 sections: []
             };
             const folderName = folderInput.value || '.';
-            startPlaylist(folderName, structure);
+            const droppedSubtitles = Array.from(subtitleFiles.keys());
+            addCourse(folderName, structure, droppedSubtitles);
         } else {
             alert('No valid video files were dropped.');
         }
@@ -469,36 +478,101 @@ async function processDroppedFolder(dirEntry) {
     return { folderName: dirEntry.name, structure, subtitlePaths: collectedSubtitlePaths, hasVideos: allVideoFiles.length > 0 };
 }
 
-function startPlaylist(folder, structure, subPaths = []) {
-    buildAndDisplayPlaylist(folder, structure);
-    savePlaylistToLocalStorage(folder, structure, 0, subPaths); // 0 is initial index
-    loadVideo(0, true);
+function addCourse(folderName, structure, subtitlePaths = []) {
+    const existingIndex = courses.findIndex(c => c.folderName === folderName);
+    if (existingIndex !== -1) {
+        courses[existingIndex] = {
+            ...courses[existingIndex],
+            structure,
+            subtitlePaths
+        };
+        currentCourseIndex = existingIndex;
+    } else {
+        courses.push({
+            folderName,
+            structure,
+            subtitlePaths,
+            lastPlayedIndex: 0
+        });
+        currentCourseIndex = courses.length - 1;
+    }
+
+    renderTabs();
+    switchCourse(currentCourseIndex);
+}
+
+function switchCourse(index) {
+    if (index < 0 || index >= courses.length) return;
+    currentCourseIndex = index;
+    const course = courses[index];
+
+    folderInput.value = course.folderName;
+    savedSubtitlePaths = course.subtitlePaths || [];
+
+    renderTabs();
+    buildAndDisplayPlaylist(course.folderName, course.structure);
+    loadVideo(course.lastPlayedIndex || 0, false);
+}
+
+function renderTabs() {
+    const tabsContainer = document.querySelector(".tabs-container");
+    if (!tabsContainer) return;
+    tabsContainer.innerHTML = "";
+
+    if (courses.length <= 1) {
+        tabsContainer.style.display = 'none';
+        return;
+    }
+
+    tabsContainer.style.display = 'flex';
+    const numerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+
+    courses.forEach((course, index) => {
+        const tab = document.createElement("button");
+        tab.className = "course-tab";
+        if (index === currentCourseIndex) tab.classList.add("active");
+
+        tab.textContent = numerals[index] || (index + 1).toString();
+        tab.title = course.folderName;
+
+        tab.onclick = () => {
+            switchCourse(index);
+        };
+
+        tabsContainer.appendChild(tab);
+    });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     const savedPlaylist = loadPlaylistFromLocalStorage();
     if (savedPlaylist) {
-        folderInput.value = savedPlaylist.folder;
-        // Restore subtitle paths
-        if (savedPlaylist.subtitlePaths) {
-            savedSubtitlePaths = savedPlaylist.subtitlePaths;
-        }
-
-        // Check if old format (videos is string)
-        if (typeof savedPlaylist.videos === 'string') {
-            // Backward compatibility: Convert to simple structure (all root)
-            const names = savedPlaylist.videos.split('|').map(s => s.trim()).filter(s => s.length);
-            const structure = {
-                root: names.map(name => ({ name, path: name, file: null })),
-                sections: []
-            };
-            // Warning: file objects are null, so drag-drop refresh might be needed for actually playing if not local-hosted
-            buildAndDisplayPlaylist(savedPlaylist.folder, structure);
+        if (savedPlaylist.courses) {
+            courses = savedPlaylist.courses;
+            currentCourseIndex = savedPlaylist.currentCourseIndex;
+            if (courses.length > 0) {
+                switchCourse(currentCourseIndex >= 0 ? currentCourseIndex : 0);
+            }
         } else {
-            buildAndDisplayPlaylist(savedPlaylist.folder, savedPlaylist.videos);
-        }
+            folderInput.value = savedPlaylist.folder;
+            savedSubtitlePaths = savedPlaylist.subtitlePaths || [];
 
-        loadVideo(savedPlaylist.lastPlayedIndex || 0, false);
+            let structure;
+            if (typeof savedPlaylist.videos === 'string') {
+                const names = savedPlaylist.videos.split('|').map(s => s.trim()).filter(s => s.length);
+                structure = {
+                    root: names.map(name => ({ name, path: name, file: null })),
+                    sections: []
+                };
+            } else {
+                structure = savedPlaylist.videos;
+            }
+
+            addCourse(savedPlaylist.folder, structure, savedSubtitlePaths);
+            if (savedPlaylist.lastPlayedIndex !== undefined) {
+                courses[0].lastPlayedIndex = savedPlaylist.lastPlayedIndex;
+                switchCourse(0);
+            }
+        }
     }
 
     // Apply saved subtitle preferences
@@ -518,7 +592,12 @@ loadPlaylistBtn.onclick = () => {
         alert("Please enter video names in the input field.");
         return;
     }
-    startPlaylist(folderInput.value || '.', videosInput.value);
+    const names = videosInput.value.split('|').map(s => s.trim()).filter(s => s.length);
+    const structure = {
+        root: names.map(name => ({ name, path: name, file: null })),
+        sections: []
+    };
+    addCourse(folderInput.value || '.', structure);
 };
 
 // === Keyboard Shortcuts & Player Controls ===
@@ -609,6 +688,12 @@ document.addEventListener("keydown", (e) => {
         case "arrowright":
         case "l":
             skip(5);
+            break;
+        case "h":
+            skip(-10);
+            break;
+        case ";":
+            skip(10);
             break;
     }
 });

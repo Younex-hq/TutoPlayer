@@ -708,6 +708,44 @@ ol.ol-theater li {
     }
 }
 
+/* == Tabs for Multiple Courses == */
+.tabs-container {
+    display: flex;
+    gap: 5px;
+    padding: 10px 10px 0 10px;
+    background-color: transparent;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    overflow-x: auto;
+}
+
+.tabs-container::-webkit-scrollbar {
+    height: 5px;
+}
+
+.course-tab {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: gray;
+    border: none;
+    padding: 5px 15px;
+    border-radius: 5px 5px 0 0;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 1rem;
+    transition: all 0.2s;
+    min-width: 40px;
+}
+
+.course-tab:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text);
+}
+
+.course-tab.active {
+    background-color: var(--selected-card);
+    color: var(--primary);
+    border-top: 2px solid var(--primary);
+}
+
 /* == Accordion / Multi-Folder Playlist Styles == */
 details.playlist-section {
     width: 100%;
