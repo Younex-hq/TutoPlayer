@@ -254,14 +254,19 @@ function loadVideo(index, autoPlay = false, resume = false) {
         folderNameDisplay.textContent = folderName;
     }
 
-    // Load Source Logic
     if (item.file) { // Play directly from browser memory if recently uploaded/dropped
         if (video.src.startsWith('blob:')) URL.revokeObjectURL(video.src);
         video.src = URL.createObjectURL(item.file);
     } else { // Fallback to relative local path when reloaded from localstorage without native File objects
         const encodedPath = item.path.split('/').map(part => encodeURIComponent(part)).join('/');
-        const encodedRootFolder = folderName.split('/').map(part => encodeURIComponent(part)).join('/');
-        video.src = `${encodedRootFolder}/${encodedPath}`;
+
+        if (folderName === 'Uploaded Files' || folderName === 'Uploaded Folder') {
+            // For standalone files, the root folder is simulated so we just use the file path
+            video.src = encodedPath;
+        } else {
+            const encodedRootFolder = folderName.split('/').map(part => encodeURIComponent(part)).join('/');
+            video.src = `${encodedRootFolder}/${encodedPath}`;
+        }
     }
 
     // --- Subtitle Loading ---
@@ -331,27 +336,52 @@ dropZone.addEventListener('drop', async (e) => {
     const items = e.dataTransfer.items;
     if (!items || items.length === 0) return;
 
-    const firstItemEntry = items[0].webkitGetAsEntry();
+    let processedFolders = 0;
+    const droppedFilesQueue = []; // Standalone files fallback
 
-    if (firstItemEntry && firstItemEntry.isDirectory) {
-        try {
-            const { folderName, structure, subtitlePaths: droppedSubtitles, hasVideos } = await processDroppedFolder(firstItemEntry);
+    for (let i = 0; i < items.length; i++) {
+        const itemEntry = items[i].webkitGetAsEntry();
 
-            // Store subtitles (paths)
-            savedSubtitlePaths = droppedSubtitles;
+        if (itemEntry) {
+            if (itemEntry.isDirectory) {
+                try {
+                    const { folderName, structure, subtitlePaths: droppedSubtitles, hasVideos } = await processDroppedFolder(itemEntry);
 
-            if (hasVideos) {
-                addCourse(folderName, structure, droppedSubtitles);
-            } else {
-                alert('No valid video files found in the dropped folder.');
+                    // Store subtitles (paths)
+                    savedSubtitlePaths = savedSubtitlePaths || [];
+                    savedSubtitlePaths = savedSubtitlePaths.concat(droppedSubtitles);
+
+                    if (hasVideos) {
+                        addCourse(folderName, structure, droppedSubtitles);
+                        processedFolders++;
+                    }
+                } catch (error) {
+                    console.error("Error processing dropped folder:", error);
+                }
+            } else if (itemEntry.isFile) {
+                // Manually queue file entries if they mixed loose files with folders
+                itemEntry.file(file => {
+                    droppedFilesQueue.push(file);
+                    // Process them at the end if we finished checking all items
+                    if (i === items.length - 1 && droppedFilesQueue.length > 0 && processedFolders === 0) {
+                        handleFilesList(droppedFilesQueue);
+                    }
+                });
             }
-        } catch (error) {
-            console.error("Error processing dropped folder:", error);
-            alert("Could not read the dropped folder.");
         }
-    } else {
-        const droppedFiles = Array.from(e.dataTransfer.files);
-        handleFilesList(droppedFiles);
+    }
+
+    // Only fallback to handleFilesList bulk if NO folders were processed, 
+    // and this looks like a pure file drop
+    if (processedFolders === 0 && e.dataTransfer.files.length > 0) {
+        // give the callbacks a tiny bit of time if we queued files via .file() 
+        setTimeout(() => {
+            if (droppedFilesQueue.length > 0) {
+                handleFilesList(droppedFilesQueue);
+            } else {
+                handleFilesList(Array.from(e.dataTransfer.files));
+            }
+        }, 100);
     }
 });
 
@@ -496,7 +526,7 @@ function switchCourse(index) {
     // Save current video's time before switching
     if (currentCourseIndex !== -1 && courses[currentCourseIndex] && currentFlattenedPlaylist && currentFlattenedPlaylist.length > 0) {
         const currentVideo = currentFlattenedPlaylist[courses[currentCourseIndex].lastPlayedIndex || 0];
-        if (currentVideo) {
+        if (currentVideo && video.currentTime > 0) { // Protect from 0 times
             courses[currentCourseIndex].videoTimestamps = courses[currentCourseIndex].videoTimestamps || {};
             courses[currentCourseIndex].videoTimestamps[currentVideo.name] = video.currentTime;
         }
@@ -873,7 +903,9 @@ video.addEventListener("timeupdate", () => {
 
     if (currentCourseIndex !== -1 && courses[currentCourseIndex] && currentFlattenedPlaylist && currentFlattenedPlaylist.length > 0) {
         const activeVideo = currentFlattenedPlaylist[courses[currentCourseIndex].lastPlayedIndex || 0];
-        if (activeVideo) {
+
+        // Prevent recording uninitialized '0' seconds right after switching tab or item
+        if (activeVideo && video.readyState >= 1 && video.currentTime > 0) {
             courses[currentCourseIndex].videoTimestamps = courses[currentCourseIndex].videoTimestamps || {};
             courses[currentCourseIndex].videoTimestamps[activeVideo.name] = video.currentTime;
 
