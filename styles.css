@@ -129,9 +129,24 @@ body.playlist-loaded .content>.contenet-table {
     display: flex;
 }
 
-body.playlist-loaded .upload-buttons {
-    opacity: 0.5;
-    pointer-events: none;
+body.playlist-loaded .upload-btn:not(.clear-all) {
+    display: none;
+}
+
+.clear-all {
+    display: none;
+}
+
+body.playlist-loaded .clear-all {
+    display: block !important;
+    background-color: rgba(255, 68, 68, 0.1);
+    color: #ff4444;
+    border-color: #ff4444;
+}
+
+body.playlist-loaded .clear-all:hover {
+    background-color: #ff4444;
+    color: white;
 }
 
 .content main {
@@ -431,14 +446,6 @@ video {
     transition: width 150ms ease-in-out, transform 150ms ease-in-out;
 }
 
-.volume-container.boosted .volume-slider {
-    accent-color: #ff4444;
-}
-
-.volume-container.boosted svg {
-    color: #ff4444;
-}
-
 .volume-container:hover .volume-slider,
 .volume-slider:focus-within {
     width: 100px;
@@ -710,6 +717,33 @@ ol.ol-theater li {
     background-color: var(--selected-card);
     color: var(--primary);
     border-top: 2px solid var(--primary);
+}
+
+/* == Context Menu == */
+.context-menu {
+    position: absolute;
+    background-color: var(--background-card);
+    border: 1px solid var(--secondary);
+    border-radius: 5px;
+    padding: 5px;
+    z-index: 10000;
+    display: none;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.context-menu button {
+    background: none;
+    border: none;
+    color: #ff4444;
+    padding: 8px 15px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.context-menu button:hover {
+    background-color: rgba(255, 68, 68, 0.1);
 }
 
 /* == Accordion / Multi-Folder Playlist Styles == */

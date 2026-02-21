@@ -1,6 +1,7 @@
 // === DOM Element Selections ===
 const folderUpload = document.getElementById("folder-upload");
 const fileUpload = document.getElementById("file-upload");
+const clearAllBtn = document.getElementById("clear-all-btn");
 const video = document.querySelector("video");
 const videoContainer = document.querySelector(".video-container");
 const track = video.querySelector("track");
@@ -616,6 +617,28 @@ fileUpload.addEventListener('change', (e) => {
     handleFilesList(files);
 });
 
+if (clearAllBtn) {
+    clearAllBtn.addEventListener("click", () => {
+        if (confirm("Are you sure you want to clear all playlists?")) {
+            localStorage.removeItem(LOCAL_STORAGE_KEY);
+            courses = [];
+            currentCourseIndex = -1;
+            document.body.classList.remove("playlist-loaded");
+            const tabsContainer = document.querySelector(".tabs-container");
+            if (tabsContainer) tabsContainer.style.display = 'none';
+            document.querySelector(".tutorials").innerHTML = "";
+            video.src = "";
+            document.querySelector("h3.folder-name").textContent = "Folder Name";
+            document.title = "TutoPlayer";
+            document.querySelector("h1.title").textContent = "TutoPlayer v4.1.0";
+            subtitleFiles.clear();
+            savedSubtitlePaths = [];
+            currentFlattenedPlaylist = [];
+            currentPlaylistStructure = null;
+        }
+    });
+}
+
 function handleFilesList(droppedFiles) {
     const droppedSubtitles = [];
     droppedFiles.forEach(file => {
@@ -796,12 +819,18 @@ playerControls.speedBtn.addEventListener("wheel", (event) => {
 
 playerControls.speedBtn.onclick = () => { video.playbackRate = 1; playerControls.speedBtn.textContent = `1x`; };
 video.addEventListener("loadeddata", () => { playerControls.totalTimeElem.textContent = formatDuration(video.duration); });
+let lastSaveTime = 0;
 video.addEventListener("timeupdate", () => {
     playerControls.currentTimeElem.textContent = formatDuration(video.currentTime);
     playerControls.timelineContainer.style.setProperty("--progress-position", video.currentTime / video.duration);
 
     if (currentCourseIndex !== -1 && courses[currentCourseIndex]) {
         courses[currentCourseIndex].currentTime = video.currentTime;
+        const now = Date.now();
+        if (now - lastSaveTime > 2000) {
+            savePlaylistToLocalStorage();
+            lastSaveTime = now;
+        }
     }
 });
 
@@ -815,35 +844,6 @@ function formatDuration(time) {
 function skip(duration) { video.currentTime += duration; }
 
 playerControls.muteBtn.addEventListener("click", toggleMute);
-
-let audioCtx;
-let sourceNode;
-let gainNode;
-
-playerControls.muteBtn.addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    if (!audioCtx) {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new AudioContext();
-        sourceNode = audioCtx.createMediaElementSource(video);
-        gainNode = audioCtx.createGain();
-        sourceNode.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-    }
-
-    const isBoosted = gainNode.gain.value > 1;
-    if (isBoosted) {
-        gainNode.gain.value = 1;
-        playerControls.volumeSlider.parentElement.classList.remove('boosted');
-    } else {
-        gainNode.gain.value = 3;
-        playerControls.volumeSlider.parentElement.classList.add('boosted');
-    }
-});
-
-window.addEventListener('beforeunload', () => {
-    savePlaylistToLocalStorage();
-});
 
 playerControls.volumeSlider.addEventListener("input", (e) => {
     video.volume = e.target.value;
