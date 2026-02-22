@@ -682,9 +682,15 @@
       display: flex;
       gap: 5px;
       padding: 10px 10px 0 10px;
-      background-color: transparent;
+      background-color: var(--background);
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       overflow-x: auto;
+
+      position: sticky;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
     }
 
     .tabs-container::-webkit-scrollbar {
@@ -867,7 +873,7 @@
           <track kind="captions" srclang="en" label="English" default>
         </video>
       </div>
-      <h1 class="title">TutoPlayer v4.1.0</h1>
+      <h1 class="title">TutoPlayer v4.3.0</h1>
       <h3 class="folder-name">Folder Name</h3>
     </main>
 
