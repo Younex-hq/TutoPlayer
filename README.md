@@ -10,14 +10,14 @@ TutoPlayer is designed to be dead simple: just one HTML file sitting next to you
 
 ### Option 1: Drop a Folder
 
-1.  Place `TutoPlayer_v4.3.0.html` **in the same directory as your video folders** (recommended for persistent local paths on refresh).
+1.  Place `TutoPlayer_v4.3.1.html` **in the same directory as your video folders** (recommended for persistent local paths on refresh).
 2.  Open the HTML file in your browser.
 3.  Drag and drop one or **multiple** folders (or standalone files) onto the page.
 4.  The playlist will be built with collapsible sections, adding separate course tabs if you drop multiple root folders simultaneously.
 
 **Example structure:**
 ```
-|TutoPlayer_v4.3.0.html
+|TutoPlayer_v4.3.1.html
 |
 |Course1/
 ├── Introduction/
@@ -46,7 +46,7 @@ TutoPlayer is designed to be dead simple: just one HTML file sitting next to you
 **Example structure:**
 ```
 Algorithm and DS/
-├── TutoPlayer_v4.3.0.html
+├── TutoPlayer_v4.3.1.html
 ├── 1. Introduction.mp4
 ├── 1. Introduction_en.vtt
 ├── 2. Big O Notation.mp4
