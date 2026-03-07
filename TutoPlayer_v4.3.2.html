@@ -471,11 +471,21 @@
       pointer-events: auto;
     }
 
-    .video-end-overlay button {
-      background-color: var(--background);
+    .next-vid-title {
+      position: absolute;
+      top: 35%;
+      font-size: 1.5rem;
+      font-weight: 500;
       color: var(--text);
+      text-align: center;
+      width: 100%;
+    }
+
+    .video-end-overlay button {
+      background-color: transparent;
       border: 1px solid var(--primary);
-      padding: 15px 30px;
+      color: var(--text);
+      padding: 10px 20px;
       border-radius: 8px;
       font-size: 1.2rem;
       cursor: pointer;
@@ -802,11 +812,13 @@
     }
 
     summary.playlist-section-header {
-      padding: 12px 15px;
+      padding: 10px 15px;
+      font-weight: 500;
       cursor: pointer;
+      user-select: none;
+      transition: background-color 0.2s, color 0.2s;
       background-color: rgba(255, 255, 255, 0.03);
       color: var(--text);
-      font-weight: 500;
       font-size: 1rem;
       list-style: none;
       display: flex;
@@ -919,6 +931,7 @@
           <track kind="captions" srclang="en" label="English" default>
         </video>
         <div class="video-end-overlay">
+          <div class="next-vid-title"></div>
           <button class="replay-btn" title="Shortcut: Space or K">
             <svg viewBox="0 0 24 24">
               <path fill="currentColor"
@@ -934,7 +947,7 @@
           </button>
         </div>
       </div>
-      <h1 class="title">TutoPlayer v4.3.1</h1>
+      <h1 class="title">TutoPlayer v4.3.2</h1>
       <h3 class="folder-name">Folder Name</h3>
     </main>
 
@@ -1111,7 +1124,11 @@
         const listItem = document.createElement("li");
         listItem.className = "tutos";
         listItem.dataset.index = index; // Store global index
-        listItem.innerHTML = svgWave + `<span>${item.name}</span>`;
+
+        // Hide extension from display name
+        const cleanName = getBaseName(item.name);
+
+        listItem.innerHTML = svgWave + `<span>${cleanName}</span>`;
         listItem.onclick = () => {
           if (currentCourseIndex !== -1 && courses[currentCourseIndex]) {
             courses[currentCourseIndex].currentTime = 0;
@@ -1146,6 +1163,18 @@
             ul.appendChild(createListItem(video, globalIndex++));
           });
           details.appendChild(ul);
+
+          details.addEventListener('toggle', (e) => {
+            if (details.open) {
+              const allDetails = document.querySelectorAll('details.playlist-section');
+              allDetails.forEach(otherDetails => {
+                if (otherDetails !== details && otherDetails.open) {
+                  otherDetails.removeAttribute('open');
+                }
+              });
+            }
+          });
+
           tutorialsListContainer.appendChild(details);
         });
       }
@@ -1175,8 +1204,21 @@
 
         // Auto-expand parent details if needed
         const parentDetails = activeLi.closest('details');
-        if (parentDetails && !parentDetails.open) {
-          parentDetails.open = true;
+
+        // Remove active folder highlight from all sections
+        const allSummaries = document.querySelectorAll('.playlist-section-header');
+        allSummaries.forEach(s => {
+          s.style.color = 'inherit';
+        });
+
+        if (parentDetails) {
+          const summary = parentDetails.querySelector('.playlist-section-header');
+          if (summary) {
+            summary.style.color = 'var(--primary)';
+          }
+          if (!parentDetails.open) {
+            parentDetails.open = true;
+          }
         }
 
         // Scroll into view
@@ -1734,6 +1776,19 @@
     video.addEventListener("ended", () => {
       if (document.fullscreenElement) document.exitFullscreen();
       videoContainer.classList.add("ended");
+
+      const nextVidTitleElem = document.querySelector(".next-vid-title");
+      const course = courses[currentCourseIndex];
+      const nextIndex = (course.lastPlayedIndex || 0) + 1;
+
+      if (nextVidTitleElem) {
+        if (nextIndex < currentFlattenedPlaylist.length) {
+          const nextVideo = currentFlattenedPlaylist[nextIndex];
+          nextVidTitleElem.textContent = `Up Next: ${getBaseName(nextVideo.name)}`;
+        } else {
+          nextVidTitleElem.textContent = "You have finished all videos.";
+        }
+      }
     });
 
     video.addEventListener("seeking", () => {
