@@ -121,9 +121,47 @@
     }
 
     .welcome-message p {
-      margin-bottom: 10px;
+      margin-bottom: 5px;
       line-height: 1.5;
       font-size: 1rem;
+    }
+
+    .shortcuts-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px 30px;
+      margin-top: 25px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      width: 100%;
+      text-align: left;
+    }
+
+    .shortcut-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.95rem;
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .shortcut-item span {
+      margin-right: 15px;
+    }
+
+    kbd {
+      background-color: var(--background-card);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      box-shadow: 0 2px 0 rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      display: inline-block;
+      font-family: inherit;
+      font-size: 0.85em;
+      font-weight: 600;
+      padding: 3px 6px;
+      min-width: 24px;
+      text-align: center;
     }
 
     body.playlist-loaded .welcome-message {
@@ -913,6 +951,33 @@
       <h2>Welcome to TutoPlayer!</h2>
       <p>Drag and drop a folder or video files to start a playlist.</p>
       <p>You can also use the upload buttons in the top right.</p>
+
+      <div class="shortcuts-list">
+        <div class="shortcut-item"><span>Play / Pause</span>
+          <div><kbd>Space</kbd> or <kbd>K</kbd></div>
+        </div>
+        <div class="shortcut-item"><span>Toggle Fullscreen</span> <kbd>F</kbd></div>
+        <div class="shortcut-item"><span>Skip Backward (5s)</span>
+          <div><kbd>J</kbd> or <kbd>&larr;</kbd></div>
+        </div>
+        <div class="shortcut-item"><span>Skip Forward (5s)</span>
+          <div><kbd>L</kbd> or <kbd>&rarr;</kbd></div>
+        </div>
+        <div class="shortcut-item"><span>Skip Backward (10s)</span> <kbd>H</kbd></div>
+        <div class="shortcut-item"><span>Skip Forward (10s)</span> <kbd>;</kbd></div>
+        <div class="shortcut-item"><span>Toggle Theater Mode</span> <kbd>T</kbd></div>
+        <div class="shortcut-item"><span>Mute / Unmute</span> <kbd>M</kbd></div>
+        <div class="shortcut-item"><span>Toggle Subtitles</span> <kbd>C</kbd></div>
+        <div class="shortcut-item"><span>Subtitle Font Size</span>
+          <div><kbd>Scroll</kbd> on [CC]</div>
+        </div>
+        <div class="shortcut-item"><span>Subtitle Opacity</span>
+          <div><kbd>Right-Click</kbd> on [CC]</div>
+        </div>
+        <div class="shortcut-item"><span>Remove Course Tab</span>
+          <div><kbd>Right-Click</kbd> on Tab</div>
+        </div>
+      </div>
     </div>
 
     <main>
